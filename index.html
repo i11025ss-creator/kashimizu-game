@@ -1,0 +1,315 @@
+<!doctype html> 
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>カシミズ君の水あつめ♪</title>
+<style>
+  :root{
+    --bg-top:#9fd9ff; --bg-bot:#dff9f7; --accent:#0277bd;
+  }
+  html,body{height:100%;margin:0;font-family:"Noto Sans JP","Meiryo",sans-serif;background:linear-gradient(180deg,var(--bg-top),var(--bg-bot));display:flex;align-items:center;justify-content:center}
+  .wrap{width:100%;max-width:920px;padding:12px;box-sizing:border-box;text-align:center}
+  h1{margin:4px 0 8px 0;color:#034a6b;font-size:20px}
+  canvas{width:100%;max-width:900px;height:520px;background:linear-gradient(#cfefff,#e6fff4);border-radius:12px;display:block;margin:0 auto;box-shadow:0 12px 30px rgba(0,0,0,0.12)}
+  .hud{display:flex;gap:8px;justify-content:center;margin-top:8px;flex-wrap:wrap}
+  .pill{background:#ffffffdd;padding:6px 10px;border-radius:10px;font-weight:700;min-width:120px}
+  .small{font-size:13px;color:#055}
+  .overlay { position:relative; max-width:900px; margin:8px auto 0; }
+  .startBox { position:absolute; left:0; top:0; width:100%; height:520px; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+  .startCard { pointer-events:auto; background:rgba(0,0,0,0.42); color:#fff; padding:18px 26px; border-radius:10px; text-align:center; }
+  .startCard .hint{font-size:13px; margin-top:8px; opacity:0.95}
+  .qbtn { position:absolute; left:8px; bottom:8px; width:28px; height:28px; border-radius:50%; background:rgba(255,255,255,0.02); color:rgba(0,0,0,0.02); font-weight:800; display:flex;align-items:center;justify-content:center; box-shadow:none; cursor:pointer; pointer-events:auto; font-size:14px; border:1px solid rgba(0,0,0,0.02); }
+  .bestDisplay { position:absolute; right:8px; bottom:8px; background:rgba(255,255,255,0.9); padding:6px 10px; border-radius:8px; font-weight:700; color:#034a6b; pointer-events:none; }
+  .celebrate { position:absolute; left:0; top:0; width:100%; height:520px; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+  .celebrateCard { background:linear-gradient(180deg,#fff,#fffde9); padding:14px; border-radius:12px; display:flex; gap:12px; align-items:center; box-shadow:0 8px 30px rgba(0,0,0,0.18); }
+  .celebrateCard img{ width:120px; height:auto; border-radius:6px; }
+  .playFooter { margin-top:8px; color:#034a6b; font-weight:700; }
+  @media (max-width:540px){ canvas{height:420px} .startBox, .celebrate { height:420px } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>カシミズ君の水あつめ♪</h1>
+
+  <div class="overlay">
+    <canvas id="c" width="900" height="520" aria-label="ゲームキャンバス"></canvas>
+
+    <div class="startBox" id="startBox">
+      <div class="startCard" id="startCard">
+        <div style="font-size:20px;font-weight:800">クリック／タップでスタート！</div>
+        <div class="hint">クリック（またはスペース）でフラップ（上へ）。門をくぐり水をあつめよう！</div>
+        <div class="hint" style="margin-top:10px;font-size:13px"></div>
+      </div>
+
+      <div class="qbtn" id="qBtn" title="?">?</div>
+      <div class="bestDisplay">Best Score: <span id="best">0</span></div>
+    </div>
+
+    <div class="celebrate" id="celebrate" style="display:none">
+      <div class="celebrateCard" id="celebrateCard">
+        <div style="font-weight:900;color:#126">おめでとう！たくさんお水をあつめたね！</div>
+        <img id="s6" src="s-6.png" alt="celebrate" onerror="this.style.display='none'">
+      </div>
+    </div>
+  </div>
+
+  <div class="hud" style="margin-top:12px">
+    <div class="pill">Score: <span id="score">0</span></div>
+    <div class="pill">Gates: <span id="gates">0</span></div>
+    <div class="pill">Distance: <span id="dist">0</span></div>
+  </div>
+
+  <div class="playFooter">Best Score: <span id="bestPlay">0</span></div>
+
+  <div id="failMsg" style="margin-top:10px;color:#b02;font-weight:800;min-height:28px"></div>
+</div>
+
+<script>
+let tick = 0;
+let speed = 2.2;
+let gravity = 0.32;
+let flapPower = -6.6;
+let spawnTimer = 0;
+let spawnInterval = 110;
+let pipes = [];
+let drops = [];
+let bonusMode = false;
+let bonusTimer = 0;
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+const scoreEl = document.getElementById('score');
+const gatesEl = document.getElementById('gates');
+const distEl = document.getElementById('dist');
+const bestEl = document.getElementById('best');
+const bestPlayEl = document.getElementById('bestPlay');
+const failMsgEl = document.getElementById('failMsg');
+const startBox = document.getElementById('startBox');
+const qBtn = document.getElementById('qBtn');
+const celebrateEl = document.getElementById('celebrate');
+
+let bestScore = parseInt(localStorage.getItem('kashi_best') || '0', 10);
+bestEl.textContent = bestScore;
+bestPlayEl.textContent = bestScore;
+
+const imgNormal = new Image(); imgNormal.src = 'a-1.png';
+const imgInv = new Image(); imgInv.src = 'a-3.png';
+const imgS6 = new Image(); imgS6.src = 's-6.png';
+
+let running = false;
+let gameOverFlag = false;
+let started = false;
+let isInvincible = false;
+let score = 0;
+let gatesPassed = 0;
+let distance = 0;
+
+let baseGapInitial = 180;
+let gapMin = 80;
+let gapShrinkPerStep = 10;
+let speedBase = 2.2;
+let speedStep = 0.4;
+let gateWidth = 56;
+
+const player = { x: Math.round(W*0.28), y: Math.round(H*0.45), vy:0, w:64, h:76, radius:22 };
+
+const failureMessages = [
+  "あともう少し！次こそは！",
+  "水をあつめてパワーアップ！！",
+  "ナイスチャレンジ！もう一回！",
+  "水はもう少しだったよ〜",
+  "おっ！なかなかやるね～♪"
+];
+
+function rand(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+
+function computeGap(){
+  const step = Math.floor(gatesPassed / 10);
+  return Math.max(gapMin, baseGapInitial - step * gapShrinkPerStep);
+}
+
+function adjustDifficulty(){
+  const step = Math.floor(gatesPassed / 10);
+  speed = speedBase + step * speedStep;
+  spawnInterval = Math.max(40, 110 - step * 10);
+}
+
+function spawnGate(){
+  const gapH = computeGap();
+  const gapY = 40 + Math.floor(Math.random() * (H - 120 - gapH));
+  const gate = { x: W + 20, gapY, gapH, w: gateWidth, passed:false };
+  pipes.push(gate);
+  drops.push({ x: gate.x + gate.w/2, y: gate.gapY + gate.gapH/2, r:12, collected:false, linked:true });
+}
+
+function startBonusCorner(){
+  bonusMode = true;
+  bonusTimer = spawnInterval * 4;
+  const qty = 10;
+  const spacing = 36;
+  const startX = W + 60;
+  const centerY = Math.floor(60 + Math.random()*(H - 120));
+  for(let i=0;i<qty;i++){
+    drops.push({ x: startX + i*spacing, y: centerY + Math.sin(i/2)*10, r:12, collected:false, linked:false });
+  }
+}
+
+function circleRectIntersect(cx,cy,cr, rx,ry,rw,rh){
+  const closestX = Math.max(rx, Math.min(cx, rx+rw));
+  const closestY = Math.max(ry, Math.min(cy, ry+rh));
+  const dx = cx - closestX, dy = cy - closestY;
+  return dx*dx + dy*dy < cr*cr;
+}
+
+canvas.addEventListener('pointerdown', (e)=>{ e.preventDefault(); onFlapOrStart(false); });
+window.addEventListener('keydown', (e)=>{ if(e.code === 'Space'){ e.preventDefault(); onFlapOrStart(false); } });
+qBtn.addEventListener('click', (e)=>{ e.stopPropagation(); e.preventDefault(); onFlapOrStart(true); });
+
+function onFlapOrStart(startInv){
+  if(!running && !started){
+    isInvincible = !!startInv;
+    beginRun();
+    player.vy = flapPower;
+    return;
+  }
+  if(gameOverFlag){
+    beginRun();
+    player.vy = flapPower;
+    return;
+  }
+  player.vy = flapPower;
+}
+
+function beginRun(){
+  running = true; gameOverFlag = false; started = true;
+  score = 0; gatesPassed = 0; distance = 0; spawnTimer = 0;
+  pipes = []; drops = []; bonusMode = false; bonusTimer = 0;
+  player.y = Math.round(H*0.45); player.vy = 0;
+  failMsgEl.textContent = '';
+  startBox.style.display = 'none';
+  celebrateEl.style.display = 'none';
+  adjustDifficulty();
+  spawnGate(); spawnGate();
+  requestAnimationFrame(loop);
+}
+
+function endRun(){
+  running = false; gameOverFlag = true;
+  if(score > bestScore){ bestScore = score; localStorage.setItem('kashi_best', bestScore); bestEl.textContent = bestScore; bestPlayEl.textContent = bestScore; }
+  const msg = failureMessages[Math.floor(Math.random()*failureMessages.length)];
+  failMsgEl.textContent = `スコア: ${score}   ${msg}`;
+  if(gatesPassed >= 40){ celebrateEl.style.display = 'flex'; } else { celebrateEl.style.display = 'none'; }
+}
+
+function loop(){
+  tick++;
+  if(running){
+    player.vy += gravity;
+    player.y += player.vy;
+    const moveSpeed = speed;
+    for(const p of pipes) p.x -= moveSpeed;
+    for(const d of drops) d.x -= moveSpeed;
+
+    if(!bonusMode){
+      spawnTimer++;
+      if(spawnTimer >= spawnInterval){ spawnTimer = 0; spawnGate(); }
+    } else {
+      if(Math.random() < 0.12){ drops.push({ x: W + 40 + Math.random()*80, y: 40 + Math.random()*(H-120), r:10, collected:false, linked:false }); }
+      bonusTimer--; if(bonusTimer <= 0) bonusMode = false;
+    }
+
+    while(pipes.length && pipes[0].x + pipes[0].w < -120) pipes.shift();
+    while(drops.length && drops[0].x < -160) drops.shift();
+
+    for(const p of pipes){
+      const topRect = { x: p.x, y: 0, w: p.w, h: p.gapY };
+      const botRect = { x: p.x, y: p.gapY + p.gapH, w: p.w, h: H - (p.gapY + p.gapH) };
+      const collided = circleRectIntersect(player.x, player.y, player.radius, topRect.x, topRect.y, topRect.w, topRect.h) ||
+                       circleRectIntersect(player.x, player.y, player.radius, botRect.x, botRect.y, botRect.w, botRect.h);
+      if(collided){
+        player.x = Math.max(60, player.x - 28); player.vy = 2.6;
+        if(!isInvincible){ endRun(); break; }
+      }
+      if(!p.passed && p.x + p.w < player.x){
+        p.passed = true; gatesPassed++; score += 5;
+        if(gatesPassed % 10 === 0){ adjustDifficulty(); startBonusCorner(); }
+      }
+    }
+
+    for(let i = drops.length - 1; i >= 0; i--){
+      const d = drops[i];
+      const dx = d.x - player.x, dy = d.y - player.y;
+      if(dx*dx + dy*dy < (d.r + player.radius)*(d.r + player.radius)){
+        drops.splice(i,1); score += 3;
+      }
+    }
+
+    if(player.y - player.radius < 0 || player.y + player.radius > H){ endRun(); }
+
+    distance += moveSpeed * 0.03;
+    updateHUD();
+  }
+
+  draw();
+  if(!gameOverFlag || running) requestAnimationFrame(loop);
+}
+
+function draw(){
+  const g = ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0, '#bfefff'); g.addColorStop(1, '#e6fff4');
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+
+  ctx.fillStyle = 'rgba(15,95,140,0.06)';
+  ctx.beginPath(); ctx.moveTo(0,H-86);
+  for(let i=0;i<W;i+=60){ const hh = 50 + (18*Math.sin(i*0.02 + tick*0.01)); ctx.lineTo(i, H - 86 - hh); }
+  ctx.lineTo(W, H-86); ctx.lineTo(W,H); ctx.lineTo(0,H); ctx.closePath(); ctx.fill();
+
+  for(const p of pipes){
+    ctx.fillStyle = '#034a6b'; ctx.fillRect(p.x, 0, p.w, p.gapY);
+    ctx.fillRect(p.x, p.gapY + p.gapH, p.w, H - (p.gapY + p.gapH));
+    ctx.fillStyle = '#0288d1'; ctx.fillRect(p.x - 6, p.gapY - 8, p.w + 12, 12);
+    ctx.fillRect(p.x - 6, p.gapY + p.gapH - 4, p.w + 12, 12);
+  }
+
+  for(const d of drops){
+    ctx.save(); ctx.translate(d.x, d.y);
+    ctx.beginPath();
+    ctx.moveTo(0, -d.r*0.55);
+    ctx.bezierCurveTo(d.r*0.6, -d.r*1.0, d.r*0.9, d.r*0.1, 0, d.r);
+    ctx.bezierCurveTo(-d.r*0.9, d.r*0.1, -d.r*0.6, -d.r*1.0, 0, -d.r*0.55);
+    ctx.closePath();
+    ctx.fillStyle = '#48b0ff'; ctx.fill();
+    ctx.beginPath(); ctx.ellipse(-d.r*0.18, -d.r*0.18, d.r*0.22, d.r*0.12, 0, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fill();
+    ctx.restore();
+  }
+
+  if(isInvincible && imgInv.complete && imgInv.naturalWidth !== 0){
+    ctx.drawImage(imgInv, player.x - player.w/2, player.y - player.h/2, player.w, player.h);
+  } else if(!isInvincible && imgNormal.complete && imgNormal.naturalWidth !== 0){
+    ctx.drawImage(imgNormal, player.x - player.w/2, player.y - player.h/2, player.w, player.h);
+  } else {
+    ctx.save();
+    ctx.fillStyle = isInvincible ? '#ffd86b' : '#66c7ff';
+    ctx.beginPath(); ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(player.x-8, player.y-6, 3,0,Math.PI*2); ctx.arc(player.x+8, player.y-6, 3,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillRect(12,12,220,40);
+  ctx.fillStyle = '#034a6b'; ctx.font = '700 16px "Noto Sans JP"';
+  ctx.fillText(`Score: ${score}`, 22, 36);
+}
+
+function updateHUD(){
+  scoreEl.textContent = score;
+  gatesEl.textContent = gatesPassed;
+  distEl.textContent = Math.floor(distance);
+  bestEl.textContent = bestScore;
+  bestPlayEl.textContent = bestScore;
+}
+</script>
+</body>
+</html>
