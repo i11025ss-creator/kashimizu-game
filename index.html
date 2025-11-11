@@ -164,7 +164,12 @@ function circleRectIntersect(cx,cy,cr, rx,ry,rw,rh){
 }
 
 canvas.addEventListener('pointerdown', (e)=>{ e.preventDefault(); onFlapOrStart(false); });
-window.addEventListener('keydown', (e)=>{ if(e.code === 'Space'){ e.preventDefault(); onFlapOrStart(false); } });
+window.addEventListener('keydown', function(e) {
+  if (e.code === 'Space' && document.activeElement === document.body) {
+    e.preventDefault();
+    onFlapOrStart(false);
+  }
+}); onFlapOrStart(false); } });
 qBtn.addEventListener('click', (e)=>{ e.stopPropagation(); e.preventDefault(); onFlapOrStart(true); });
 
 function onFlapOrStart(startInv){
