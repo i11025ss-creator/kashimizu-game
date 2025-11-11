@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>♪カシミズ君の水あつめ♪</title>
+<title>カシミズ君の水あつめ♪</title>
 <style>
   :root{
     --bg-top:#9fd9ff; --bg-bot:#dff9f7; --accent:#0277bd;
@@ -30,7 +30,7 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>♪カシミズ君の水あつめ♪</h1>
+  <h1>カシミズ君の水あつめ♪</h1>
 
   <div class="overlay">
     <canvas id="c" width="900" height="520" aria-label="ゲームキャンバス"></canvas>
@@ -164,12 +164,7 @@ function circleRectIntersect(cx,cy,cr, rx,ry,rw,rh){
 }
 
 canvas.addEventListener('pointerdown', (e)=>{ e.preventDefault(); onFlapOrStart(false); });
-window.addEventListener('keydown', function(e) {
-  if (e.code === 'Space' && document.activeElement === document.body) {
-    e.preventDefault();
-    onFlapOrStart(false);
-  }
-}); onFlapOrStart(false); } });
+window.addEventListener('keydown', (e)=>{ if(e.code === 'Space'){ e.preventDefault(); onFlapOrStart(false); } });
 qBtn.addEventListener('click', (e)=>{ e.stopPropagation(); e.preventDefault(); onFlapOrStart(true); });
 
 function onFlapOrStart(startInv){
